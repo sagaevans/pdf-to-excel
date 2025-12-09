@@ -19,7 +19,7 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
-// ====== PILIH FILE ======
+// ============= PILIH FILE =============
 
 function handleFile(file) {
   if (!file) return;
@@ -63,41 +63,42 @@ dropzone.addEventListener("drop", (e) => {
   handleFile(e.dataTransfer.files[0]);
 });
 
-// ====== FUNGSI: UBAH STRING ANGKA → NUMBER ======
+// ============= UBAH STRING ANGKA → NUMBER =============
 
+// Mengembalikan Number jika string adalah angka uang, selain itu kembalikan string asli
 function toNumberIfNumeric(str) {
   if (typeof str !== "string") return str;
-  const s = str.replace(/\s/g, ""); // buang spasi
 
+  const s = str.replace(/\s/g, "");
   if (!s) return str;
 
-  // Jangan ubah kalau dia ID yang punya nol di depan (misal teller id 0374620)
+  // Teller ID / kode lain dengan nol depan jangan diubah
   if (/^0\d+$/.test(s)) return str;
 
-  // Pola angka US: 12,345,678.90
+  // US style: 1,234,567.89
   const usPattern = /^\d{1,3}(,\d{3})*(\.\d+)?$/;
-  // Pola angka EU/ID: 12.345.678,90
+  // Indo/EU style: 1.234.567,89
   const euPattern = /^\d{1,3}(\.\d{3})*(,\d+)?$/;
-  // Pola sederhana: 1234,56 atau 1234.56
+  // Simple: 1234.56 atau 1234,56
   const simplePattern = /^-?\d+([.,]\d+)?$/;
 
   let normalized;
   let num;
 
   if (usPattern.test(s)) {
-    normalized = s.replace(/,/g, ""); // buang pemisah ribuan
+    normalized = s.replace(/,/g, ""); // "12,345.67" -> "12345.67"
     num = Number(normalized);
     return isNaN(num) ? str : num;
   }
 
   if (euPattern.test(s)) {
-    normalized = s.replace(/\./g, "").replace(",", "."); // 12.345,67 -> 12345.67
+    normalized = s.replace(/\./g, "").replace(",", "."); // "12.345,67" -> "12345.67"
     num = Number(normalized);
     return isNaN(num) ? str : num;
   }
 
   if (simplePattern.test(s)) {
-    normalized = s.replace(",", "."); // 1234,56 -> 1234.56
+    normalized = s.replace(",", "."); // "1234,56" -> "1234.56"
     num = Number(normalized);
     return isNaN(num) ? str : num;
   }
@@ -105,7 +106,7 @@ function toNumberIfNumeric(str) {
   return str;
 }
 
-// ====== KONVERSI PDF → EXCEL ======
+// ============= KONVERSI PDF → EXCEL =============
 
 convertBtn.addEventListener("click", async () => {
   if (!pdfArrayBuffer || !currentFile) {
@@ -117,9 +118,7 @@ convertBtn.addEventListener("click", async () => {
     convertBtn.disabled = true;
     setStatus("Memuat PDF...");
 
-    const loadingTask = pdfjsLib.getDocument({
-      data: pdfArrayBuffer
-    });
+    const loadingTask = pdfjsLib.getDocument({ data: pdfArrayBuffer });
     const pdf = await loadingTask.promise;
 
     let allRows = [];
@@ -131,7 +130,7 @@ convertBtn.addEventListener("click", async () => {
       const content = await page.getTextContent();
       const items = content.items;
 
-      // Grup per baris berdasarkan koordinat Y
+      // Grup per baris (berdasarkan Y)
       let lines = [];
 
       items.forEach((item) => {
@@ -146,17 +145,15 @@ convertBtn.addEventListener("click", async () => {
         line.cells.push({ x, str: item.str });
       });
 
-      // Urutkan baris: atas → bawah
+      // Atas → bawah
       lines.sort((a, b) => b.y - a.y);
 
       lines.forEach((line) => {
-        // Urutkan teks dalam baris: kiri → kanan
+        // Kiri → kanan
         line.cells.sort((a, b) => a.x - b.x);
 
-        // Gabung dengan 1 spasi
+        // Gabung kata yg berdekatan, pisahkan 2+ spasi jadi kolom
         const joined = line.cells.map((c) => c.str.trim()).join(" ");
-
-        // Pecah kolom dengan 2+ spasi (jadi "DATE  TIME  REMARK  DEBET" dst)
         const cols = joined
           .split(/\s{2,}/)
           .map((c) => c.trim())
@@ -172,25 +169,25 @@ convertBtn.addEventListener("click", async () => {
       return;
     }
 
-    // Samakan jumlah kolom di semua baris
+    // Samakan jumlah kolom
     const maxCols = Math.max(...allRows.map((r) => r.length));
     allRows = allRows.map((r) => {
       while (r.length < maxCols) r.push("");
       return r;
     });
 
-    // UBAH TEXT ANGKA → NUMBER (supaya di Excel muncul format lokal, misal 12.295.574.073,33)
-    allRows = allRows.map((row) => row.map(toNumberIfNumeric));
+    // Ubah cell yang berupa angka → Number, yang lain tetap string
+    const processed = allRows.map((row) => row.map(toNumberIfNumeric));
 
     // Buat workbook Excel
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(allRows);
+    const ws = XLSX.utils.aoa_to_sheet(processed);
     XLSX.utils.book_append_sheet(wb, ws, "Hasil");
 
     const outName = currentFile.name.replace(/\.pdf$/i, "") + "_converted.xlsx";
     XLSX.writeFile(wb, outName);
 
-    setStatus("✅ Selesai! File Excel telah diunduh (angka sudah dalam format numerik).");
+    setStatus("✅ Selesai! File Excel telah diunduh (kolom angka bertipe Number).");
   } catch (err) {
     console.error(err);
     setStatus("❌ Gagal mengonversi: " + (err.message || err));
